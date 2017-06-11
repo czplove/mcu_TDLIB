@@ -10,12 +10,18 @@
 /  Apr 29, 2006  R0.01  First stable version
 /---------------------------------------------------------------------------*/
 
+/*****************************************************************************
+*×¢ÊÍ:	ºÎÐ¡Áú
+*ÈÕÆÚ:	2014.01.11
+*²©¿Í:	http://blog.csdn.net/hexiaolong2009
+*****************************************************************************/
+
 #include <string.h>
 #include "ff.h"			/* FatFs declarations */
 #include "diskio.h"		/* Include file for user provided functions */
 
 
-FATFS *FatFs;			/* Pointer to the file system object */
+FATFS *FatFs;			/* Pointer to the file system object *///-ÔÚÓ¦ÓÃ³ÌÐòÖÐÎªÕâ¸öÖ¸Õë¸±Êµ¼ÊÖµ£¬ÓÃÓÚ¼ÇÂ¼ÐÅÏ¢
 
 
 /*-------------------------------------------------------------------------
@@ -25,33 +31,44 @@ FATFS *FatFs;			/* Pointer to the file system object */
 /*----------------------*/
 /* Change Window Offset */
 
+//¶ÁÈ¡ÐÂµÄÉÈÇøÄÚÈÝµ½ÁÙÊ±»º³åÇøwin[]£¬
+//Èç¹ûsectorÎª0£¬ÔòÖ»ÐèÒª°Ñwin[]µÄÄÚÈÝÐ´Èë¶ÔÓ¦µÄÎïÀíÉÈÇø¼´¿É
 static
-BOOL move_window (
+BOOL move_window (	//-ËùÎ½µÄ´°¿ÚÆäÊµ¾ÍÊÇÒ»¸öÉÈÇø´óÐ¡µÄÊý¾Ý»º´æ,ÓÃÓÚ²Ù×÷µÄ
 	DWORD sector		/* Sector number to make apperance in the FatFs->win */
 )						/* Move to zero only writes back dirty window */
 {
-	DWORD wsect;
-	FATFS *fs = FatFs;
+	DWORD wsect;		//wsectÓÃÓÚ¼ìË÷FAT±¸·Ý±íµÄÏàÓ¦ÉÈÇø
+	FATFS *fs = FatFs;	//-»ñÈ¡ÁËÈ«¾Ö±äÁ¿½á¹¹
 
 
-	wsect = fs->winsect;
+	wsect = FatFs->winsect;	//-µ±Ç°»º³åÇøµÄÄÚÈÝÊÇÄÄ¸öÉÈÇøºÅµÄÄÚÈÝ
+	/*Ê×ÏÈ¼ì²éÄ¿±êÉÈÇøºÅÊÇ·ñÓëwin[]¶ÔÓ¦µÄÉÈÇøºÅÏàÍ¬£¬Èç¹ûÏàÍ¬Ôò²»½øÐÐÈÎºÎ²Ù×÷¡£*/
 	if (wsect != sector) {	/* Changed current window */
 #ifndef _FS_READONLY
 		BYTE n;
-		if (fs->winflag) {	/* Write back dirty window if needed */
-			if (disk_write(fs->win, wsect, 1) != RES_OK) return FALSE;
-			fs->winflag = 0;
-			if (wsect < (fs->fatbase + fs->sects_fat)) {	/* In FAT area */
-				for (n = fs->n_fats; n >= 2; n--) {	/* Refrect the change to all FAT copies */
-					wsect += fs->sects_fat;
-					if (disk_write(fs->win, wsect, 1) != RES_OK) break;
+
+		//Ê×ÏÈ¼ì²âwin[]µÄÄÚÈÝÊÇ·ñ×ö¹ýÐÞ¸Ä£¬Èç¹ûÐÞ¸Ä¹ý£¬ÔòÐèÒªÏÈ½«ÆäÐ´ÈëSD¿¨ÖÐ¡£
+		if (FatFs->dirtyflag) {	/* Write back dirty window if needed */
+			if (disk_write(FatFs->win, wsect, 1) != RES_OK) return FALSE;	//-°ÑÐÞ¸Ä¹ýµÄÄÚÈÝÐ´»Ø´ÅÅÌ
+
+			//Çå³ýÐÞ¸Ä±ê¼Ç
+			FatFs->dirtyflag = 0;
+			
+			/*Èç¹ûµ±Ç°²Ù×÷µÄÊÇFAT±í£¬ÄÇÃ´ÐèÒª½«ÐÞ¸ÄºóµÄFAT±í¿½±´µ½¶ÔÓ¦µÄFAT±¸·ÝÖÐ*/
+			if (wsect < (FatFs->fatbase + FatFs->sects_fat)) {	/* In FAT area */
+				for (n = FatFs->n_fats; n >= 2; n--) {	/* Refrect the change to all FAT copies */
+					wsect += FatFs->sects_fat;
+					if (disk_write(FatFs->win, wsect, 1) != RES_OK) break;
 				}
 			}
 		}
 #endif
+
+		//È»ºóÔÙ¶ÁÈ¡ÐÂµÄÉÈÇøÄÚÈÝµ½win[]ÖÐ
 		if (sector) {
-			if (disk_read(fs->win, sector, 1) != RES_OK) return FALSE;
-			fs->winsect = sector;
+			if (disk_read(FatFs->win, sector, 1) != RES_OK) return FALSE;	//-Ö±½Ó¶ÁÈ¡´ÅÅÌµÄÖ¸¶¨ÄÚÈÝ
+			FatFs->winsect = sector;	//¸üÐÂµ±Ç°»º³åÇøµÄÉÈÇøºÅ
 		}
 	}
 	return TRUE;
@@ -62,6 +79,7 @@ BOOL move_window (
 /*---------------------*/
 /* Get Cluster State   */
 
+//¶ÁÈ¡Ö¸¶¨´ØµÄÄÚÈÝ£¬¼´»ñÈ¡ÏÂÒ»Ìõ´ØÁ´µÄÎ»ÖÃ
 static
 DWORD get_cluster (
 	DWORD clust			/* Cluster# to get the link information */
@@ -73,10 +91,21 @@ DWORD get_cluster (
 	if ((clust >= 2) && (clust < fs->max_clust)) {		/* Valid cluster# */
 		switch (fs->fs_type) {
 		case FS_FAT16 :
+			/*¶ÁÈ¡FAT±í£¬ÒòÎªFAT16Ò»¸öÉÈÇø°üº¬256¸ö´Ø£¬ËùÒÔÕâÀïÒª³ýÒÔ256*/
 			if (!move_window(clust / 256 + fs->fatbase)) break;
+			
+			/*¶ÁÈ¡Ö¸¶¨´ØºÅµÄÄÚÈÝ£¬¸ÃÄÚÈÝ¼´ÎªÏÂÒ»¸ö´ØÁ´µÄ´ØºÅ£»
+			ÓÉÓÚFAT16ÖÐÒ»¸ö´ØÓÃ2×Ö½Ú±íÊ¾£¬ËùÒÔÕâÀï³ËÒÔ2£»
+			¶Ô511½øÐÐÓëÔËËã£¬µÈÍ¬ÓÚ¶Ô512È¡Óà¡£*/
 			return LD_WORD(&(fs->win[((WORD)clust * 2) & 511]));
+			
 		case FS_FAT32 :
+			/*¶ÁÈ¡FAT±í£¬ÒòÎªFAT32Ò»¸öÉÈÇø°üº¬128¸ö´Ø£¬ËùÒÔÕâÀïÒª³ýÒÔ128*/
 			if (!move_window(clust / 128 + fs->fatbase)) break;
+			
+			/*¶ÁÈ¡Ö¸¶¨´ØºÅµÄÄÚÈÝ£¬¸ÃÄÚÈÝ¼´ÎªÏÂÒ»¸ö´ØÁ´µÄ´ØºÅ£»
+			ÓÉÓÚFAT32ÖÐÒ»¸ö´ØÓÃ4×Ö½Ú±íÊ¾£¬ËùÒÔÕâÀï³ËÒÔ4£»
+			¶Ô511½øÐÐÓëÔËËã£¬µÈÍ¬ÓÚ¶Ô512È¡Óà¡£*/
 			return LD_DWORD(&(fs->win[((WORD)clust * 4) & 511]));
 		}
 	}
@@ -88,6 +117,7 @@ DWORD get_cluster (
 /*--------------------------*/
 /* Change a Cluster State   */
 
+//½«Ä¿±êÖµÐ´ÈëFAT±íÖÐ¶ÔÓ¦´ØºÅµÄÖ¸¶¨Î»ÖÃ£¬×¢Òâ:Ö»ÔÚwin[]ÖÐ²Ù×÷
 #ifndef _FS_READONLY
 static
 BOOL put_cluster (
@@ -100,7 +130,10 @@ BOOL put_cluster (
 
 	switch (fs->fs_type) {
 	case FS_FAT16 :
+		/*Ê×ÏÈ¶ÁÈ¡clustËùÔÚFAT±íµÄÏàÓ¦ÉÈÇøÄÚÈÝµ½win[]ÖÐ*/
 		if (!move_window(clust / 256 + fs->fatbase)) return FALSE;
+		
+		/*Æä´Î½«valÐ´Èëwin[]ÖÐµÄÏàÓ¦Î»ÖÃ*/
 		ST_WORD(&(fs->win[((WORD)clust * 2) & 511]), (WORD)val);
 		break;
 	case FS_FAT32 :
@@ -110,7 +143,9 @@ BOOL put_cluster (
 	default :
 		return FALSE;
 	}
-	fs->winflag = 1;
+
+	/*×îºó±ê¼Çwin[]ÒÑ×öÁËÐÞ¸Ä£¬ÐèÒª»ØÐ´*/
+	fs->dirtyflag = 1;
 	return TRUE;
 }
 #endif
@@ -120,6 +155,7 @@ BOOL put_cluster (
 /*------------------------*/
 /* Remove a Cluster Chain */
 
+//É¾³ýÒ»Ìõ´ØÁ´
 #ifndef _FS_READONLY
 static
 BOOL remove_chain (
@@ -128,7 +164,7 @@ BOOL remove_chain (
 {
 	DWORD nxt;
 
-
+	/*Ñ­»·ËÑËØÄ¿±ê´ØºÅµÄÕû¸ö´ØÁ´£¬²¢½«ÆäÇåÁã*/
 	while ((nxt = get_cluster(clust)) >= 2) {
 		if (!put_cluster(clust, 0)) return FALSE;
 		clust = nxt;
@@ -142,17 +178,26 @@ BOOL remove_chain (
 /*-----------------------------------*/
 /* Stretch or Create a Cluster Chain */
 
+//À©Õ¹»ò´´½¨Ò»ÌõÐÂµÄ´ØÁ´
+//Èôclust = 0£»´´½¨Ò»ÌõÐÂµÄ´ØÁ´
+//ÈôclustÎª´ØÁ´ÖÐµÄ×îºóÒ»¸ö´Ø£¬ÔòÔÚÄ©Î²×·¼ÓÒ»¸ö´Ø
+//Èôclust²»ÊÇ´ØÁ´ÖÐµÄ×îºóÒ»¸ö£¬ÔòÖ±½Ó·µ»ØÏÂÒ»¸ö´ØºÅ
 #ifndef _FS_READONLY
 static
 DWORD create_chain (
 	DWORD clust			 /* Cluster# to stretch, 0 means create new */
 )
 {
+	//ncl: new cluster,     ÐÂµÄ´ØºÅ£¬Ò²ÊÇÒª·µ»ØµÄ´ØºÅ£»
+	//ccl: current cluster, ÁÙÊ±±£´æÓÃµÄ´ØºÅ£»
+	//mcl: max cluster,     ´ØºÅÉÏÏÞÖµ
 	DWORD ncl, ccl, mcl = FatFs->max_clust;
 
 
+	//Èç¹ûÊÇ´´½¨Ò»ÌõÐÂµÄ´ØÁ´
 	if (clust == 0) {	/* Create new chain */
 		ncl = 1;
+		//´ÓµÚ2´Ø¿ªÊ¼ËÑË÷µÚ1¸öµÈÓÚ0µÄ´Ø£¬²¢½«Æä´ØºÅ¼ÇÂ¼ÓÚnclÖÐ
 		do {
 			ncl++;						/* Check next cluster */
 			if (ncl >= mcl) return 0;	/* No free custer was found */
@@ -160,21 +205,33 @@ DWORD create_chain (
 			if (ccl == 1) return 0;		/* Any error occured */
 		} while (ccl);				/* Repeat until find a free cluster */
 	}
+	//Èç¹ûÊÇÀ©Õ¹´ØÁ´
 	else {				/* Stretch existing chain */
+        
+		//Èç¹ûclust²»ÊÇ´ØÁ´ÖÐµÄ×îºóÒ»¸ö´Ø£¬ÔòÖ±½Ó·µ»ØÏÂÒ»¸ö´ØºÅ
 		ncl = get_cluster(clust);	/* Check the cluster status */
 		if (ncl < 2) return 0;		/* It is an invalid cluster */
 		if (ncl < mcl) return ncl;	/* It is already followed by next cluster */
+
+		//´ÓclustÖ¸¶¨µÄ´ØºÅ¿ªÊ¼£¬°´´ØºÅµÝÔöË³ÐòËÑË÷FAT±íÖÐµÚÒ»¸öµÈÓÚ0µÄ´Ø£¬²¢½«Æä´ØºÅ¼ÇÂ¼ÓÚnclÖÐ
 		ncl = clust;				/* Search free cluster */
 		do {
 			ncl++;						/* Check next cluster */
+			//Èç¹ûÒÑ¾­ËÑË÷µ½×îºó1¸ö´Ø»¹Ã»ËÑµ½µÄ»°£¬Ôò´Ó×î¿ªÊ¼¼´µÚ2´Ø¿ªÊ¼ËÑË÷
 			if (ncl >= mcl) ncl = 2;	/* Wrap around */
+			
+			//Èç¹ûËÑ±éÁËÕû¸öFAT±íÒ²Ã»ËÑµ½µÄ»°£¬ÄÇÖ»ºÃ·µ»Ø0ÁË£¬±íÊ¾Ã»ÓÐ¿ÕÏÐ´Ø¿É·ÖÅä
 			if (ncl == clust) return 0;	/* No free custer was found */
+			
 			ccl = get_cluster(ncl);		/* Get the cluster status */
 			if (ccl == 1) return 0;		/* Any error occured */
 		} while (ccl);				/* Repeat until find a free cluster */
 	}
 
+	//±ê¼ÇÐÂµÄ´ØºÅÒÑ±»Õ¼ÓÃ
 	if (!put_cluster(ncl, 0xFFFFFFFF)) return 0;		/* Mark the new cluster "in use" */
+
+	//Èç¹ûÊÇÀ©Õ¹´ØÁ´£¬ÄÇÃ´»¹Òª½«ÐÂµÄ´ØÁ´Ç¶Èëµ½clustÖÐÈ¥
 	if (clust && !put_cluster(clust, ncl)) return 0;	/* Link it to previous one if needed */
 
 	return ncl;		/* Return new cluster number */
@@ -186,6 +243,7 @@ DWORD create_chain (
 /*----------------------------*/
 /* Get Sector# from Cluster#  */
 
+//´ØºÅ×ª»»³É¶ÔÓ¦µÄÆðÊ¼ÉÈÇøºÅ
 static
 DWORD clust2sect (
 	DWORD clust		/* Cluster# to be converted */
@@ -193,9 +251,11 @@ DWORD clust2sect (
 {
 	FATFS *fs = FatFs;
 
-
+	//ÒòÎª´ØºÅÊÇ´Ó2¿ªÊ¼ËãÆðµÄ£¬ËùÒÔÒªÏÈ¼õÈ¥¸ö2
 	clust -= 2;
 	if (clust >= fs->max_clust) return 0;		/* Invalid cluster# */
+
+	//ÎÄ¼þ´ØÎ»ÓÚÊý¾ÝÇø£¬ËùÒÔÒª¼ÓÉÏÊý¾ÝÇøµÄÆ«ÒÆÉÈÇø
 	return clust * fs->sects_clust + fs->database;
 }
 
@@ -204,24 +264,38 @@ DWORD clust2sect (
 /*------------------------*/
 /* Check File System Type */
 
+//¼ì²éÎÄ¼þÏµÍ³ÀàÐÍ£¬²ÎÊýsectÒ»°ãÎªDBRËùÔÚÉÈÇøºÅ
+//0:ÎÞÐ§ÎÄ¼þÏµÍ³
+// 1:FAT16ÎÄ¼þÏµÍ³
+// 2:FAT32ÎÄ¼þÏµÍ³
 static
-BYTE check_fs (
+BYTE check_fs (	//-´ÓÕâÀï¿ÉÒÔ²Â²âµ½Ò»¸ö´æ´¢½éÖÊÊ¹ÓÃµÄÎÄ¼þÏµÍ³,ÊÇËùÓÐµÄ¶«Î÷¶¼ÈÏ¿ÉµÄ¸ñÊ½µÄ---¹Ì¶¨µÄµØ·½ÓÐ¹Ì¶¨¸ñÊ½ÐÅÏ¢
 	DWORD sect		/* Sector# to check if it is a FAT boot record or not */
 )
 {
 	static const char fatsign[] = "FAT16FAT32";
 	FATFS *fs = FatFs;
 
-
+	//Ê×ÏÈ½«FATFS¶ÔÏóµÄÉÈÇø»º³åÇøÇåÁã
 	memset(fs->win, 0, 512);
+
+	//È»ºó¶ÁÈ¡Ö¸¶¨ÉÈÇøÄÚÈÝµ½»º³åÇøÖÐ
 	if (disk_read(fs->win, sect, 1) == RES_OK) {	/* Load boot record */
+
+		//¼ì²é×îºó2×Ö½ÚÊÇ·ñÎª'0x55' '0xAA'
 		if (LD_WORD(&(fs->win[510])) == 0xAA55) {		/* Is it valid? */
+
+			//¼ì²éÊÇ·ñÎªFAT16ÎÄ¼þÏµÍ³£¬Í¨¹ýÊÇ·ñ´æÔÚ"FAT16"×Ö·ûÀ´ÅÐ¶Ï
 			if (!memcmp(&(fs->win[0x36]), &fatsign[0], 5))
 				return FS_FAT16;
+
+			//¼ì²éÊÇ·ñÎªFAT32ÎÄ¼þÏµÍ³£¬Í¨¹ýÊÇ·ñ´æÔÚ"FAT32"×Ö·ûÀ´ÅÐ¶Ï
 			if (!memcmp(&(fs->win[0x52]), &fatsign[5], 5) && (fs->win[0x28] == 0))
 				return FS_FAT32;
 		}
 	}
+
+	//ÎÞÐ§Ôò·µ»Ø0
 	return 0;
 }
 
@@ -370,6 +444,13 @@ char make_dirfile (
 /*-------------------*/
 /* Trace a File Path */
 
+/*²éÕÒ·ûºÏÎÄ¼þÃûµÄÄ¿Â¼Ïî£¬²¢Ìî³äscan½á¹¹Ìå£¬Í¬Ê±·µ»ØÄ¿Â¼ÏîÔÚµ±Ç°WIN[]»º³åÇøÖÐµÄÆ«ÒÆµØÖ·µ½dir*/
+/*¸Ãº¯ÊýÖ»ÓÐ1¸öÊäÈë²ÎÊýpath£¬3¸öÊä³ö²ÎÊýscan,fn,dir£»
+path:ÓÃÀ´Ö¸¶¨Òª²éÕÒµÄÎÄ¼þÃû(È«Â·¾¶Ãû)
+
+scan:ÓÃÀ´·µ»ØÕÒµ½µÄÄ¿Â¼Ïî½á¹¹Ìå
+fn:ÓÃÀ´·µ»Ø±ê×¼µÄ8.3¸ñÊ½ÎÄ¼þÃû
+dir:ÓÃÀ´·µ»ØÄ¿Â¼ÏîÔÚµ±Ç°WIN[]»º³åÇøÖÐµÄ×Ö½ÚÆ«ÒÆÁ¿*/
 static
 FRESULT trace_path (
 	DIR *scan,			/* Pointer to directory object to return last directory */
@@ -383,25 +464,43 @@ FRESULT trace_path (
 	BYTE *dptr = NULL;
 	FATFS *fs = FatFs;
 
+	/*ÆäÊµÄ¿Â¼Ïî¾Í4ÏîÄÚÈÝ:
+		Ä¿Â¼ÏîËùÔÚµÄÆðÊ¼´ØºÅsclust
+		Ä¿Â¼ÏîËùÔÚµÄµ±Ç°´ØºÅclust
+		Ä¿Â¼ÏîËùÔÚµÄµ±Ç°ÉÈÇøºÅsect
+		Ä¿Â¼ÏîÔÚµ±Ç°ÉÈÇøÖÐµÄË÷ÒýºÅindex(0~15)
+	  Ö»ÒªÕÒµ½Õâ4ÏîÄÚÈÝ¾Í¿ÉÒÔÁË¡£
+	*/
+	
+	/*Ê×ÏÈ³õÊ¼»¯Ä¿Â¼ÏîµÄ»ù±¾²ÎÊý*/
 	/* Initialize directory object */
-	clust = fs->dirbase;
+	clust = fs->dirbase;	//-×î³õÕâ¸öÐÅÏ¢ÊÇ´ÓÓ²¼þÖÐ¶ÁÈ¡³öÀ´µÄ
 	if (fs->fs_type == FS_FAT32) {
+        //¶ÔÓÚFAT32À´½²£¬dirbaseÎª¸ùÄ¿Â¼ÆðÊ¼´ØºÅ£»
 		scan->clust = scan->sclust = clust;
 		scan->sect = clust2sect(clust);
 	} else {
+        //µ«¶ÔÓÚFAT16À´½²£¬dirbaseÎª¸ùÄ¿Â¼ÆðÊ¼ÉÈÇøºÅ*/
 		scan->clust = scan->sclust = 0;
 		scan->sect = clust;
 	}
 	scan->index = 0;
 
+	//È¥µô¿ªÍ·µÄ¿Õ¸ñ·ûºÍÄ¿Â¼·Ö¸ô·û'/'
 	while ((*path == ' ') || (*path == '/')) path++;	/* Skip leading spaces */
+
+	//-Èç¹ûÊÇ¸ùÄ¿Â¼µÄ»°Í¨¹ýÉÏÃæµÄÈ¥³ý¾ÍÖ»Ê£ÏÂ'/0'ÁË
 	if ((BYTE)*path < ' ') {							/* Null path means the root directory */
 		*dir = NULL; return FR_OK;
 	}
 
+	//´Ó¸ùÄ¿Â¼¿ªÊ¼£¬Öð²ã²éÕÒÎÄ¼þ
 	for (;;) {
+		//Ã¿´Î´ÓÂ·¾¶ÖÐ½ØÈ¡×îÉÏ²ãµÄÄ¿Â¼Ãûµ½fnÖÐ£¬²¢¸ñÊ½»¯³É8.3¸ñÊ½
 		ds = make_dirfile(&path, fn);			/* Get a paragraph into fn[] */
 		if (ds == 1) return FR_INVALID_NAME;
+
+		//ÔÚÉÈÇøÖÐ£¬ÒÀ´Î²éÕÒ·ûºÏfnµÄÄ¿Â¼Ïî
 		for (;;) {
 			if (!move_window(scan->sect)) return FR_RW_ERROR;
 			dptr = &(fs->win[(scan->index & 15) * 32]);	/* Pointer to the directory entry */
@@ -466,7 +565,7 @@ BYTE* reserve_direntry (
 		if (disk_write(fs->win, sector, 1) != RES_OK) return NULL;
 		sector++;
 	}
-	fs->winflag = 1;
+	fs->dirtyflag = 1;
 	return fs->win;
 }
 #endif
@@ -476,8 +575,9 @@ BYTE* reserve_direntry (
 /*-----------------------------------------*/
 /* Make Sure that the File System is Valid */
 
+//Êµ¼Ê¾ÍÊÇµ÷ÓÃf_mountdrvº¯Êý
 static
-FRESULT check_mounted ()
+FRESULT check_mounted ()	//-¼ì²é¹ÒÔØÆäÊµ¾ÍÊÇ¶ÔÓ²¼þµÄÐÅÏ¢¶ÁÈ¡
 {
 	FATFS *fs = FatFs;
 
@@ -507,22 +607,29 @@ FRESULT check_mounted ()
 
 /*----------------------------------------------------------*/
 /* Load File System Information and Initialize FatFs Module */
-
-FRESULT f_mountdrv ()
+//±¾º¯Êý×öÈý¼þÊÂ:
+// 1.³õÊ¼»¯SD¿¨
+// 2.¼ì²éÎÄ¼þÏµÍ³ÀàÐÍ£¬FAT16»¹ÊÇFAT32
+// 3.Ìî³äFatFs¶ÔÏó£¬¼´¼ÇÂ¼ÎïÀí´ÅÅÌµÄÏà¹Ø²ÎÊý
+FRESULT f_mountdrv ()	//-°Ñ´ÅÅÌ²ÎÊý´ÓÓ²¼þÉÏ¶ÁÈ¡µ½ÄÚ´æ½á¹¹ÌåÄÚ
 {
 	BYTE fat;
 	DWORD sect, fatend;
-	FATFS *fs = FatFs;
+	FATFS *fs = FatFs;	//-Ö¸ÏòÎÄ¼þÏµÍ³½á¹¹Ìå
 
 
 	if (!fs) return FR_NOT_ENABLED;
 
+	//Ê×ÏÈ¶ÔÎÄ¼þÏµÍ³¶ÔÏóÇå¿Õ
 	/* Initialize file system object */
 	memset(fs, 0, sizeof(FATFS));
 
+	//È»ºó³õÊ¼»¯SD¿¨
 	/* Initialize disk drive */
-	if (disk_initialize() & STA_NOINIT)	return FR_NOT_READY;
+	if (disk_initialize() & STA_NOINIT)	return FR_NOT_READY;	//-ÕâÀïµÄº¯ÊýÐèÒªÍâ²¿ÊµÏÖ
 
+	//½Ó×ÅÊÕËÑË÷DBRÏµÍ³Òýµ¼¼ÇÂ¼£¬ÏÈ¼ì²éµÚ0ÉÈÇøÊÇ·ñ¾ÍÊÇDBR(ÎÞMBRµÄSD¿¨)£¬Èç¹ûÊÇÔò¼ì²éÎÄ¼þÏµÍ³µÄÀàÐÍ£»
+	//Èç¹û²»ÊÇÔòËµÃ÷µÚ0ÉÈÇøÊÇMBR£¬Ôò¸ù¾ÝMBRÖÐµÄÐÅÏ¢¶¨Î»µ½DBRËùÔÚÉÈÇø£¬²¢¼ì²é¸ÃÎÄ¼þÏµÍ³µÄÀàÐÍ
 	/* Search FAT partition */
 	fat = check_fs(sect = 0);		/* Check sector 0 as an SFD format */
 	if (!fat) {						/* Not a FAT boot record, it will be an FDISK format */
@@ -534,15 +641,29 @@ FRESULT f_mountdrv ()
 	}
 	if (!fat) return FR_NO_FILESYSTEM;	/* No FAT patition */
 
+	//³õÊ¼»¯ÎÄ¼þÏµÍ³¶ÔÏó£¬¸ù¾ÝDBR²ÎÊýÐÅÏ¢¶ÔFs³ÉÔ±¸³Öµ
 	/* Initialize file system object */
+
+	//ÎÄ¼þÏµÍ³ÀàÐÍ:FAT16/FAT32
 	fs->fs_type = fat;								/* FAT type */
+
+	//µ¥¸öFAT±íËùÕ¼µÄÉÈÇøÊý
 	fs->sects_fat = 								/* Sectors per FAT */
 		(fat == FS_FAT32) ? LD_DWORD(&(fs->win[0x24])) : LD_WORD(&(fs->win[0x16]));
+
+	//µ¥¸ö´ØËùÕ¼µÄÉÈÇøÊý
 	fs->sects_clust = fs->win[0x0D];				/* Sectors per cluster */
+
+	//FAT±í×ÜÊý
 	fs->n_fats = fs->win[0x10];						/* Number of FAT copies */
+
+	//FAT±íÆðÊ¼ÉÈÇø(ÎïÀíÉÈÇø)
 	fs->fatbase = sect + LD_WORD(&(fs->win[0x0E]));	/* FAT start sector (physical) */
+
+	//¸ùÄ¿Â¼ÏîÊý
 	fs->n_rootdir = LD_WORD(&(fs->win[0x11]));		/* Nmuber of root directory entries */
 
+	//¼ÆËã¸ùÄ¿Â¼ÆðÊ¼ÉÈÇø¡¢Êý¾ÝÆðÊ¼ÉÈÇø(ÎïÀíÉÈÇøµØÖ·)
 	fatend = fs->sects_fat * fs->n_fats + fs->fatbase;
 	if (fat == FS_FAT32) {
 		fs->dirbase = LD_DWORD(&(fs->win[0x2C]));	/* Directory start cluster */
@@ -551,6 +672,8 @@ FRESULT f_mountdrv ()
 		fs->dirbase = fatend;						/* Directory start sector (physical) */
 		fs->database = fs->n_rootdir / 16 + fatend;	/* Data start sector (physical) */
 	}
+
+	//×î´ó´ØºÅ
 	fs->max_clust = 								/* Maximum cluster number */
 		(LD_DWORD(&(fs->win[0x20])) - fs->database + sect) / fs->sects_clust + 2;
 
@@ -602,7 +725,11 @@ FRESULT f_getfree (
 
 /*-----------------------*/
 /* Open or Create a File */
-
+/*
+1. ³õÊ¼»¯SD¿¨£¬³õÊ¼»¯FATFS¶ÔÏó£»
+2. ²éÕÒÎÄ¼þµÄÄ¿Â¼Ïî£»
+3. Ìî³äÎÄ¼þ½á¹¹ÌåFIL¡£
+*/
 FRESULT f_open (
 	FIL *fp,			/* Pointer to the buffer of new file object to create */
 	const char *path,	/* Pointer to the file path */
@@ -612,22 +739,29 @@ FRESULT f_open (
 	FRESULT res;
 	BYTE *dir;
 	DIR dirscan;
-	char fn[8+3+1];
-	FATFS *fs = FatFs;
+	char fn[8+3+1];			//8.3 DOSÎÄ¼þÃû
+	FATFS *fs = FatFs;		//-ÏÈÓÃÒ»¸öÖ¸ÕëÊµÏÖÂß¼­£¬ÊµÌåÓ¦ÓÃÊ±ÔÙ¸³Öµ
 
-
+	/*Ê×ÏÈ³õÊ¼»¯SD¿¨£¬¼ì²âÎÄ¼þÏµÍ³ÀàÐÍ£¬³õÊ¼»¯FATFS¶ÔÏó*/
 	if ((res = check_mounted()) != FR_OK) return res;
+	
 #ifndef _FS_READONLY
+
+	//Èç¹û´ÅÅÌÉèÖÃÎªÐ´±£»¤£¬Ôò·µ»Ø´íÎóÂë:FR_WRITE_PROTECTED
 	if ((mode & (FA_WRITE|FA_CREATE_ALWAYS)) && (disk_status() & STA_PROTECT))
 		return FR_WRITE_PROTECTED;
 #endif
 
-	res = trace_path(&dirscan, fn, path, &dir);	/* Trace the file path */
+	//¸ù¾ÝÓÃ»§Ìá¹©µÄÎÄ¼þÂ·¾¶path£¬½«ÎÄ¼þÃû¶ÔÓ¦µÄÄ¿Â¼Ïî¼°ÆäÕû¸öÉÈÇø¶ÁÈ¡µ½win[]ÖÐ£¬
+	//²¢Ìî³äÄ¿Â¼Ïîdirscan¡¢±ê×¼¸ñÊ½µÄÎÄ¼þÃûfn£¬ÒÔ¼°Ä¿Â¼ÏîÔÚwin[]ÖÐµÄ×Ö½ÚÆ«ÒÆÁ¿dir
+	res = trace_path(&dirscan, fn, path, &dir);	/* Trace the file path */	//-¸ù¾ÝÎÄ¼þÃûÌáÈ¡Õû¸öÐÅÏ¢
 
 #ifndef _FS_READONLY
 	/* Create or Open a File */
 	if (mode & (FA_CREATE_ALWAYS|FA_OPEN_ALWAYS)) {
 		DWORD dw;
+
+        //Èç¹ûÎÄ¼þ²»´æÔÚ£¬ÔòÇ¿ÖÆÐÂ½¨ÎÄ¼þ
 		if (res != FR_OK) {		/* No file, create new */
 			mode |= FA_CREATE_ALWAYS;
 			if (res != FR_NO_FILE) return res;
@@ -636,9 +770,12 @@ FRESULT f_open (
 			memcpy(dir, fn, 8+3);		/* Initialize the new entry */
 			*(dir+12) = fn[11];
 			memset(dir+13, 0, 32-13);
-		} else {				/* File already exists */
+		} 
+        else {				/* File already exists */
 			if ((dir == NULL) || (*(dir+11) & (AM_RDO|AM_DIR)))	/* Could not overwrite (R/O or DIR) */
 				return FR_DENIED;
+            
+            //Èç¹ûÎÄ¼þ´æÔÚ£¬µ«ÓÖÒÔFA_CREATE_ALWAYS·½Ê½´ò¿ªÎÄ¼þ£¬ÔòÖØÐ´ÎÄ¼þ
 			if (mode & FA_CREATE_ALWAYS) {	/* Resize it to zero */
 				dw = fs->winsect;			/* Remove the cluster chain */
 				if (!remove_chain(((DWORD)LD_WORD(dir+20) << 16) | LD_WORD(dir+26))
@@ -648,26 +785,34 @@ FRESULT f_open (
 				ST_DWORD(dir+28, 0);					/* size = 0 */
 			}
 		}
+
+		//Èç¹ûÊÇÇ¿ÖÆÐÂ½¨ÎÄ¼þ²Ù×÷£¬Ôò»¹Ðè¸üÐÂÊ±¼äºÍÈÕÆÚ
 		if (mode & FA_CREATE_ALWAYS) {
 			*(dir+11) = AM_ARC;
 			dw = get_fattime();
 			ST_DWORD(dir+14, dw);	/* Created time */
 			ST_DWORD(dir+22, dw);	/* Updated time */
-			fs->winflag = 1;
+			fs->dirtyflag = 1;	//-ËµÃ÷»º³åÇøµÄÄÚÈÝ±»ÐÞ¸Ä¹ýÁË
 		}
 	}
 	/* Open a File */
 	else {
 #endif
 		if (res != FR_OK) return res;		/* Trace failed */
+
+		//Èç¹û´ò¿ªµÄÊÇÒ»¸öÄ¿Â¼ÎÄ¼þ£¬Ôò·µ»Ø´íÎóÂë:FR_NO_FILE
 		if ((dir == NULL) || (*(dir+11) & AM_DIR))	/* It is a directory */
 			return FR_NO_FILE;
+		
 #ifndef _FS_READONLY
+
+		//Èç¹ûÒÔFA_WRITE·½Ê½´ò¿ªRead-OnlyÊôÐÔµÄÎÄ¼þ£¬Ôò·µ»Ø´íÎóÂë:FR_DENIED
 		if ((mode & FA_WRITE) && (*(dir+11) & AM_RDO)) /* R/O violation */
 			return FR_DENIED;
 	}
 #endif
 
+	//Ìî³äFILÎÄ¼þ½á¹¹Ìå²ÎÊý
 #ifdef _FS_READONLY
 	fp->flag = mode & (FA_UNBUFFERED|FA_READ);
 #else
@@ -678,8 +823,11 @@ FRESULT f_open (
 	fp->org_clust =	((DWORD)LD_WORD(dir+20) << 16) | LD_WORD(dir+26);	/* File start cluster */
 	fp->fsize = LD_DWORD(dir+28);		/* File size */
 	fp->fptr = 0;						/* File ptr */
+
+    //ÕâÒ»²½ºÜÖØÒª£¬Ëü½«Ö±½Óµ¼ÖÂf_readºÍf_write²Ù×÷ÖÐµÄÂß¼­Ë³Ðò
 	fp->sect_clust = 1;					/* Sector counter */
-	fs->files++;
+    
+	fs->files++;	//-¼ÇÂ¼Ä¿Ç°´ò¿ªÎÄ¼þµÄÊýÄ¿
 	return FR_OK;
 }
 
@@ -687,7 +835,7 @@ FRESULT f_open (
 
 /*-----------*/
 /* Read File */
-
+//ÎÄ¼þ¶Á²Ù×÷
 FRESULT f_read (
 	FIL *fp, 		/* Pointer to the file object */
 	BYTE *buff,		/* Pointer to data buffer */
@@ -696,55 +844,118 @@ FRESULT f_read (
 )
 {
 	DWORD clust, sect, ln;
-	WORD rcnt;
-	BYTE cc;
+	WORD rcnt;		/*ÒÑ¾­¶ÁÈ¡µÄ×Ö½ÚÊý*/
+	BYTE cc;		/*Êµ¼Êµ¥´ÎÒª¶ÁÈ¡µÄÁ¬Ðø×î´óÉÈÇøÊý*/
 	FATFS *fs = FatFs;
 
 
 	*br = 0;
+    
+    //´íÎó´¦Àí
 	if (!fs) return FR_NOT_ENABLED;
 	if ((disk_status() & STA_NOINIT) || !fs->fs_type) return FR_NOT_READY;	/* Check disk ready */
 	if (fp->flag & FA__ERROR) return FR_RW_ERROR;	/* Check error flag */
 	if (!(fp->flag & FA_READ)) return FR_DENIED;	/* Check access mode */
-	ln = fp->fsize - fp->fptr;
+	
+	//¼ì²éÒª¶ÁÈ¡µÄ×Ö½ÚÊýÊÇ·ñ³¬³öÁËÊ£ÓàµÄÎÄ¼þ³¤¶È£¬Èç¹û³¬³öÁË£¬ÔòÖ»¶ÁÈ¡Ê£Óà×Ö½Ú³¤¶È
+	ln = fp->fsize - fp->fptr;	//-µÃÊ£ÓàÎÄ¼þ³¤¶È
 	if (btr > ln) btr = ln;							/* Truncate read count by number of bytes left */
 
-	for ( ;  btr;									/* Repeat until all data transferred */
-		buff += rcnt, fp->fptr += rcnt, *br += rcnt, btr -= rcnt) {
-		if ((fp->fptr & 511) == 0) {				/* On the sector boundary */
-			if (--(fp->sect_clust)) {				/* Decrement sector counter */
+    //¸ÃÑ­»·ÒÔ´ØÎªµ¥Î»£¬Ã¿Ñ­»·Ò»´Î¾Í¶ÁÍêÒ»¸ö´ØµÄÄÚÈÝ
+	/* Repeat until all data transferred */
+	for ( ;  btr; buff += rcnt, fp->fptr += rcnt, *br += rcnt, btr -= rcnt) 
+	{
+			
+        //µ±ÎÄ¼þÖ¸ÕëÓëÉÈÇø±ß½ç¶ÔÆëÊ±(Èç:¸Õ´ò¿ªÎÄ¼þÊ±)£¬Ö´ÐÐÒÔÏÂ²Ù×÷£»
+        //·ñÔò(Èç:µ÷ÓÃÁËf_lseekº¯Êý)Ö»½«µ±Ç°bufferÖÐÐèÒªµÄÄÚÈÝÖ±½Ócopyµ½Ä¿±ê»º³åÇø£¬È»ºó½øÈëÏÂÒ»´ÎÑ­»·¡£
+		if ((fp->fptr & 511) == 0) 					/* On the sector boundary */
+		{				
+            //Èç¹û»¹Ã»ÓÐ¶ÁÍêµ±Ç°´ØµÄËùÓÐÉÈÇø£¬Ôò½«ÏÂÒ»¸öÉÈÇøºÅ¸³¸ø±äÁ¿sect¡£
+			//×¢Òâ£¬µ±µÚÒ»´Î¶ÁÈ¡ÎÄ¼þÊ±£¬ÓÉÓÚf_openº¯ÊýÖÐ£¬ÒÑ¾­½«sect_clust¸³ÖµÎª1£¬
+			//ËùÒÔÓ¦¸ÃÖ´ÐÐelseÓï¾ä
+			if (--(fp->sect_clust)) 				/* Decrement sector counter */
+			{	
+                //Ò»°ã×ßµ½ÕâÀï¾ÍÒâÎ¶×ÅÖ»Ê£ÏÂ×îºóÒ»¸öÉÈÇøÐèÒª¶ÁÈ¡£¬ÇÒÒª¶ÁÈ¡µÄÄÚÈÝÐ¡ÓÚ512×Ö½Ú
 				sect = fp->curr_sect + 1;			/* Next sector */
-			} else {								/* Next cluster */
+			} 
+			//Èç¹ûÒÑ¾­¶ÁÍêµ±Ç°´ØµÄËùÓÐÉÈÇø£¬Ôò¼ÆËãÏÂÒ»¸ö´ØµÄÆðÊ¼Î»ÖÃ£¬
+			//²¢¸üÐÂFILÖÐµÄµ±Ç°´ØºÅcurr_clustºÍµ±Ç°´ØÊ£ÓàÉÈÇøÊýsect_clust
+			else 									/* Next cluster */
+			{	
+                //Èç¹ûµ±Ç°ÎÄ¼þÖ¸ÕëÔÚÆðÊ¼´ØÄÚ£¬Ôò½«clustÉèÖÃÎªÆðÊ¼´ØºÅ£»
+                //·ñÔò£¬½«clustÉèÖÃÎªÏÂÒ»´ØºÅ
 				clust = (fp->fptr == 0) ? fp->org_clust : get_cluster(fp->curr_clust);
 				if ((clust < 2) || (clust >= fs->max_clust)) goto fr_error;
+                
 				fp->curr_clust = clust;				/* Current cluster */
 				sect = clust2sect(clust);			/* Current sector */
 				fp->sect_clust = fs->sects_clust;	/* Re-initialize the sector counter */
 			}
+			
 #ifndef _FS_READONLY
-			if (fp->flag & FA__DIRTY) {				/* Flush file I/O buffer if needed */
+
+			//Èç¹ûbufferÖÐµÄÄÚÈÝ±»ÐÞ¸Ä¹ý£¬ÔòÐèÒªÏÈ½«bufferÖÐµÄÄÚÈÝ»ØÐ´µ½ÎïÀí´ÅÅÌÖÐ
+			if (fp->flag & FA__DIRTY) 				/* Flush file I/O buffer if needed */
+			{				
 				if (disk_write(fp->buffer, fp->curr_sect, 1) != RES_OK) goto fr_error;
 				fp->flag &= ~FA__DIRTY;
 			}
 #endif
+
+			//¸üÐÂµ±Ç°ÉÈÇøºÅ
 			fp->curr_sect = sect;					/* Update current sector */
-			cc = btr / 512;							/* When left bytes >= 512 */
-			if (cc) {								/* Read maximum contiguous sectors */
-				if (cc > fp->sect_clust) cc = fp->sect_clust;
+
+			//¼ÆËãÐèÒª¶ÁÈ¡²¿·ÖµÄÊ£ÓàÉÈÇøÊýcc(×îºóÒ»¸öÉÈÇøÄÚÈÝÈô²»Âú512×Ö½ÚÔò²»¼ÆÈëccÖÐ)
+			cc = btr / 512;							
+
+			//Ö»Òªµ±Ç°ÉÈÇø²»ÊÇ×îºóÒ»¸öÉÈÇø£¬ÔòÖ´ÐÐÁ¬ÐøµÄ¶Á²Ù×÷£¬È»ºóÖ±½Ó½øÈëÏÂÒ»´ÎÑ­»·
+			/* When left bytes >= 512 */
+            /* Read maximum contiguous sectors */
+			if (cc) 								
+			{	
+                //Èç¹ûccÐ¡ÓÚµ±Ç°´ØµÄÊ£ÓàÉÈÇøÊýsect_clust£¬ÔòÁ¬Ðø¶ÁÈ¡cc¸öÉÈÇø£»
+                //Èç¹ûcc´óÓÚµ±Ç°´ØµÄÊ£ÓàÉÈÇøÊýsect_clust£¬ÔòÖ»¶ÁÈ¡µ±Ç°´ØµÄÊ£ÓàÉÈÇø
+				if (cc > fp->sect_clust) cc = fp->sect_clust;   
+
+				//Ö´ÐÐÊµ¼ÊµÄ´ÅÅÌ¶Á²Ù×÷£¬¶ÁÈ¡µ±Ç°´ØµÄÊ£ÓàÉÈÇøÄÚÈÝµ½Ä¿±ê»º³åÇøÖÐ
+				//×¢Òâ£¬ÊÇÖ±½Ó¶Áµ½Ä¿±ê½ÓÊÕ»º³åÇøµÄ£¬¶ø²»ÊÇµ½bufferÖÐ
 				if (disk_read(buff, sect, cc) != RES_OK) goto fr_error;
+
+				//¸üÐÂµ±Ç°´ØµÄÊ£ÓàÉÈÇøÊý
+				//¸ÃÓï¾äÊµ¼ÊÎª:sect_clust = sect_clust - (cc - 1) = sect_clust - cc + 1;
+				//Ö®ËùÒÔ+1ÊÇÒòÎªµ±cc == sect_clustÊ±£¬sect_clust = sect_clust - sect_clust + 1 = 1£»
+				//ËùÒÔµ±ÏÂÒ»´ÎÑ­»·Ö´ÐÐµ½ if (--(fp->sect_clust)) Ê±Ö±½Ó½øÈëelseÓï¾ä¡£
 				fp->sect_clust -= cc - 1;
-				fp->curr_sect += cc - 1;
-				rcnt = cc * 512; continue;
+				
+				//¸üÐÂµ±Ç°ÉÈÇøºÅ£¬ÉÈÇøºÅÊÇ»ùÓÚ0Ë÷ÒýµÄ£¬ËùÒÔÕâÀïÒª-1
+				fp->curr_sect += cc - 1;	//-µ±Ç°ÉÈÇøºÅ,ÔÚÎÄ¼þ½á¹¹ÌåÖÐ¼ÇÂ¼
+
+				//¸üÐÂÒÑ¶ÁµÄ×Ö½ÚÊý
+				rcnt = cc * 512; 
+
+                //Ö±½Ó½øÈëÏÂÒ»´ÎÑ­»·
+                continue;
 			}
+
 			if (fp->flag & FA_UNBUFFERED)			/* Reject unaligned access when unbuffered mode */
 				return FR_ALIGN_ERROR;
+
+			//¶ÔÓÚÎÄ¼þµÄ×îºóÒ»¸öÉÈÇø£¬ÔòÏÈ½«ÄÚÈÝ¶ÁÈ¡µ½bufferÖÐ£¬È»ºó½«ÐèÒªµÄÄÚÈÝ¿½±´µ½Ä¿±ê»º³åÇøÖÐ£¬²¢ÍË³öÑ­»·
 			if (disk_read(fp->buffer, sect, 1) != RES_OK)	/* Load the sector into file I/O buffer */
 				goto fr_error;
-		}
-		rcnt = 512 - (fp->fptr & 511);				/* Copy fractional bytes from file I/O buffer */
+            
+		}//end if ((fp->fptr & 511) == 0)
+
+		//¼ÆËã´ÓbufferÖÐÊµ¼ÊÒª¶ÁÈ¡µÄ×Ö½ÚÊýrcnt
+		rcnt = 512 - (fp->fptr & 511);				
 		if (rcnt > btr) rcnt = btr;
-		memcpy(buff, &fp->buffer[fp->fptr & 511], rcnt);
-	}
+
+		//×îºó½«bufferÖÐµÄÖ¸¶¨Êý¾Ý¿½±´µ½Ä¿±ê»º³åÇøÖÐ
+		memcpy(buff, &fp->buffer[fp->fptr & 511], rcnt);    /* Copy fractional bytes from file I/O buffer */
+
+        //Ò»°ã×ßµ½ÕâÀï¾ÍËµÃ÷ÒÑ¾­¶ÁÍêÁË×îºóÒ»ÉÈÇø£¬ÏÂÒ»²½½«ÍË³öÑ­»·;
+        //Èç¹û»¹Ã»ÓÐ¶ÁÍê×îºóÒ»ÉÈ£¬ÔòÓÐ¿ÉÄÜÊÇÔÚµ÷ÓÃf_lseekºóµÚÒ»´Îµ÷ÓÃf_read£¬ÄÇÃ´½«½øÈëÏÂÒ»´ÎÑ­»·
+	}//end for(...)
 
 	return FR_OK;
 
@@ -767,63 +978,132 @@ FRESULT f_write (
 )
 {
 	DWORD clust, sect;
-	WORD wcnt;
-	BYTE cc;
+	WORD wcnt;          /*ÒÑ¾­Ð´ÈëµÄ×Ö½ÚÊý*/
+	BYTE cc;            /*Êµ¼Êµ¥´ÎÒªÐ´ÈëµÄÁ¬Ðø×î´óÉÈÇøÊý*/
 	FATFS *fs = FatFs;
 
 
 	*bw = 0;
+
+    //´íÎó´¦Àí
 	if (!fs) return FR_NOT_ENABLED;
 	if ((disk_status() & STA_NOINIT) || !fs->fs_type) return FR_NOT_READY;
 	if (fp->flag & FA__ERROR) return FR_RW_ERROR;	/* Check error flag */
 	if (!(fp->flag & FA_WRITE)) return FR_DENIED;	/* Check access mode */
+    
+    //±£Ö¤Ð´ÈëºóÕû¸öÎÄ¼þ´óÐ¡²»µÃ³¬¹ý4GB
 	if (fp->fsize + btw < fp->fsize) btw = 0;		/* File size cannot reach 4GB */
 
-	for ( ;  btw;									/* Repeat until all data transferred */
-		buff += wcnt, fp->fptr += wcnt, *bw += wcnt, btw -= wcnt) {
-		if ((fp->fptr & 511) == 0) {				/* On the sector boundary */
-			if (--(fp->sect_clust)) {				/* Decrement sector counter */
+    //¸ÃÑ­»·ÒÔ´ØÎªµ¥Î»£¬Ã¿Ñ­»·Ò»´Î¾ÍÐ´ÍêÒ»¸ö´ØµÄÄÚÈÝ
+    /* Repeat until all data transferred */
+	for ( ;  btw; buff += wcnt, fp->fptr += wcnt, *bw += wcnt, btw -= wcnt) 
+	{
+        //µ±ÎÄ¼þÖ¸ÕëÓëÉÈÇø±ß½ç¶ÔÆëÊ±(Èç:¸Õ´ò¿ªÎÄ¼þÊ±)£¬Ö´ÐÐÒÔÏÂ²Ù×÷£»
+        //·ñÔò(Èç:µ÷ÓÃÁËf_lseekº¯Êý)Ö»½«µ±Ç°ÉÈÇøËùÐèÒªµÄÄÚÈÝcopyµ½bufferÖÐ£¬È»ºó½øÈëÏÂÒ»´ÎÑ­»·¡£
+		if ((fp->fptr & 511) == 0)                  /* On the sector boundary */
+        {               
+            //Èç¹û»¹Ã»ÓÐÐ´Íêµ±Ç°´ØµÄËùÓÐÉÈÇø£¬Ôò½«ÏÂÒ»¸öÉÈÇøºÅ¸³¸ø±äÁ¿sect¡£
+			//×¢Òâ£¬µ±µÚÒ»´ÎÐ´ÎÄ¼þÊ±£¬ÓÉÓÚf_openº¯ÊýÖÐ£¬ÒÑ¾­½«sect_clust¸³ÖµÎª1£¬
+			//ËùÒÔÓ¦¸ÃÖ´ÐÐelseÓï¾ä
+			if (--(fp->sect_clust))                 /* Decrement sector counter */
+            {               
+                //Ò»°ã×ßµ½ÕâÀï¾ÍÒâÎ¶×ÅÖ»Ê£ÏÂ×îºóÒ»¸öÉÈÇøÐèÒªÐ´Èë£¬ÇÒÒªÐ´ÈëµÄÄÚÈÝÐ¡ÓÚ512×Ö½Ú
 				sect = fp->curr_sect + 1;			/* Next sector */
-			} else {								/* Next cluster */
-				if (fp->fptr == 0) {				/* Top of the file */
+			} 
+            //Èç¹ûÒÑ¾­Ð´Íêµ±Ç°´ØµÄËùÓÐÉÈÇø£¬Ôò¼ÆËãÏÂÒ»¸ö´ØµÄÆðÊ¼Î»ÖÃ£¬
+            //²¢¸üÐÂFILÖÐµÄµ±Ç°´ØºÅcurr_clustºÍµ±Ç°´ØÊ£ÓàÉÈÇøÊýsect_clust
+            else                                    /* Next cluster */
+            {   
+                //Èç¹ûµ±Ç°ÎÄ¼þÖ¸ÕëÔÚÆðÊ¼´ØÄÚ£¬Ôò½«µ±Ç°´ØÉèÖÃÎªÆðÊ¼´Ø£»
+				if (fp->fptr == 0)                  /* Top of the file */
+                {               
 					clust = fp->org_clust;
+                    
+                    //Èç¹ûÎÄ¼þ²»´æÔÚ£¬ÔòÏÈ´´½¨Ò»¸öÐÂµÄ´Ø£¬²¢½«¸Ã´ØºÅÉèÖÃÎªµ±Ç°´ØºÅ
 					if (clust == 0)					/* No cluster is created */
 						fp->org_clust = clust = create_chain(0);	/* Create a new cluster chain */
-				} else {							/* Middle or end of file */
+				} 
+                //Èç¹ûµ±Ç°ÎÄ¼þÖ¸Õë²»ÔÚÆðÊ¼´ØÄÚ£¬Ôò½«ÏÂÒ»´ØºÅÉèÖÃÎªµ±Ç°´ØºÅ
+                else                                /* Middle or end of file */
+                {                           
 					clust = create_chain(fp->curr_clust);			/* Trace or streach cluster chain */
 				}
 				if ((clust < 2) || (clust >= fs->max_clust)) break;
+                
 				fp->curr_clust = clust;				/* Current cluster */
 				sect = clust2sect(clust);			/* Current sector */
 				fp->sect_clust = fs->sects_clust;	/* Re-initialize the sector counter */
 			}
-			if (fp->flag & FA__DIRTY) {				/* Flush file I/O buffer if needed */
+            
+			//Èç¹ûbufferÖÐµÄÄÚÈÝ±»ÐÞ¸Ä¹ý£¬ÔòÐèÒªÏÈ½«bufferÖÐµÄÄÚÈÝ»ØÐ´µ½ÎïÀí´ÅÅÌÖÐ
+			if (fp->flag & FA__DIRTY)               /* Flush file I/O buffer if needed */
+            {               
 				if (disk_write(fp->buffer, fp->curr_sect, 1) != RES_OK) goto fw_error;
 				fp->flag &= ~FA__DIRTY;
 			}
+            
+			//¸üÐÂµ±Ç°ÉÈÇøºÅ
 			fp->curr_sect = sect;					/* Update current sector */
-			cc = btw / 512;							/* When left bytes >= 512 */
-			if (cc) {								/* Write maximum contiguous sectors */
+
+			//¼ÆËãÐèÒªÐ´Èë²¿·ÖµÄÊ£ÓàÉÈÇøÊýcc(×îºóÒ»¸öÉÈÇøÄÚÈÝÈô²»Âú512×Ö½ÚÔò²»¼ÆÈëccÖÐ)
+            cc = btw / 512;							
+
+			//Ö»Òªµ±Ç°ÉÈÇø²»ÊÇ×îºóÒ»¸öÉÈÇø£¬ÔòÖ´ÐÐÁ¬ÐøµÄÐ´²Ù×÷£¬È»ºóÖ±½Ó½øÈëÏÂÒ»´ÎÑ­»·
+			/* When left bytes >= 512 */
+            /* Write maximum contiguous sectors */
+			if (cc)                                 
+            {                              
+                //Èç¹ûccÐ¡ÓÚµ±Ç°´ØµÄÊ£ÓàÉÈÇøÊýsect_clust£¬ÔòÁ¬ÐøÐ´Èëcc¸öÉÈÇø£»
+                //Èç¹ûcc´óÓÚµ±Ç°´ØµÄÊ£ÓàÉÈÇøÊýsect_clust£¬ÔòÖ»½«µ±Ç°´ØµÄÊ£ÓàÉÈÇøÐ´ÈëÎïÀí´ÅÅÌÖÐ
 				if (cc > fp->sect_clust) cc = fp->sect_clust;
+                
+				//Ö´ÐÐÊµ¼ÊµÄ´ÅÅÌÐ´²Ù×÷£¬½«Ô´»º³åÇøÖÐµÄÄÚÈÝÐ´Èëµ½µ±Ç°´ØµÄÊ£ÓàÉÈÇøÖÐ
+				//×¢Òâ£¬ÊÇÖ±½Ó´ÓÔ´»º³åÇøÐ´µ½ÎïÀí´ÅÅÌÖÐµÄ£¬Ã»ÓÐ¾­¹ýbuffer
 				if (disk_write(buff, sect, cc) != RES_OK) goto fw_error;
+                
+				//¸üÐÂµ±Ç°´ØµÄÊ£ÓàÉÈÇøÊý
+				//¸ÃÓï¾äÊµ¼ÊÎª:sect_clust = sect_clust - (cc - 1) = sect_clust - cc + 1;
+				//Ö®ËùÒÔ+1ÊÇÒòÎªµ±cc == sect_clustÊ±£¬sect_clust = sect_clust - sect_clust + 1 = 1£»
+				//ËùÒÔµ±ÏÂÒ»´ÎÑ­»·Ö´ÐÐµ½ if (--(fp->sect_clust)) Ê±Ö±½Ó½øÈëelseÓï¾ä¡£
 				fp->sect_clust -= cc - 1;
+                
+				//¸üÐÂµ±Ç°ÉÈÇøºÅ£¬ÉÈÇøºÅÊÇ»ùÓÚ0Ë÷ÒýµÄ£¬ËùÒÔÕâÀïÒª-1
 				fp->curr_sect += cc - 1;
-				wcnt = cc * 512; continue;
+                
+				//¸üÐÂÒÑÐ´µÄ×Ö½ÚÊý
+				wcnt = cc * 512; 
+
+                //Ö±½Ó½øÈëÏÂÒ»´ÎÑ­»·
+                continue;
 			}
+            
 			if (fp->flag & FA_UNBUFFERED)			/* Reject unalighend access when unbuffered mode */
 				return FR_ALIGN_ERROR;
-			if ((fp->fptr < fp->fsize) &&  			/* Fill sector buffer with file data if needed */
-				(disk_read(fp->buffer, sect, 1) != RES_OK))
+            
+            //Èç¹ûÒÑ¾­Ð´µ½×îºóÒ»¸öÉÈÇøÁË£¬ÔòÏÈ½«SD¿¨ÖÐËù¶ÔÓ¦ÉÈÇøµÄÔ­Ê¼ÄÚÈÝ¶ÁÈ¡µ½bufferÖÐ£¬È»ºóÐÞ¸ÄbufferÖÐµÄÄÚÈÝ£¬ÔÙ´Óbuffer»ØÐ´µ½ÎïÀí´ÅÅÌÖÐ
+			if ((fp->fptr < fp->fsize) && (disk_read(fp->buffer, sect, 1) != RES_OK)) /* Fill sector buffer with file data if needed */
 					goto fw_error;
-		}
+            
+		}//end if ((fp->fptr & 511) == 0) 
+        
+		//¼ÆËãÊµ¼ÊÒªÐ´ÈëµÄ×Ö½ÚÊýwcnt
 		wcnt = 512 - (fp->fptr & 511);				/* Copy fractional bytes to file I/O buffer */
 		if (wcnt > btw) wcnt = btw;
+        
+		//½«Ô´»º³åÇøÖÐµÄÊý¾Ý¿½±´µ½bufferÖÐµÄÖ¸¶¨Î»ÖÃ
 		memcpy(&fp->buffer[fp->fptr & 511], buff, wcnt);
-		fp->flag |= FA__DIRTY;
-	}
 
+        //ÉèÖÃbuffer»ØÐ´±ê¼Ç£¬µ±µ÷ÓÃf_close»òÖ´ÐÐÏÂÒ»´ÎÑ­»·²Ù×÷Ê±£¬Ö´ÐÐbuffer»ØÐ´²Ù×÷
+		fp->flag |= FA__DIRTY;
+        
+        //Ò»°ã×ßµ½ÕâÀï¾ÍËµÃ÷ÒÑ¾­Ð´ÍêÁË×îºóÒ»ÉÈÇø£¬ÏÂÒ»²½½«ÍË³öÑ­»·;
+        //Èç¹û»¹Ã»ÓÐÐ´Íê×îºóÒ»ÉÈ£¬ÔòÓÐ¿ÉÄÜÊÇÔÚµ÷ÓÃf_lseekºóµÚÒ»´Îµ÷ÓÃf_write£¬ÄÇÃ´½«½øÈëÏÂÒ»´ÎÑ­»·
+	}//end for(; btw; buff += wcnt,...)
+
+    //Èç¹û¶ÔÔ­Ê¼ÎÄ¼þÔö¼ÓÁËÐÂµÄÄÚÈÝ£¬ÔòÐèÒª¸üÐÂÎÄ¼þµÄ´óÐ¡£¬²¢ÉèÖÃÎÄ¼þ´óÐ¡¸üÐÂ±ê¼ÇFA__WRITTEN
 	if (fp->fptr > fp->fsize) fp->fsize = fp->fptr;	/* Update file size if needed */
 	fp->flag |= FA__WRITTEN;						/* Set file changed flag */
+    
 	return FR_OK;
 
 fw_error:	/* Abort this file due to an unrecoverable error */
@@ -847,21 +1127,31 @@ FRESULT f_lseek (
 	FATFS *fs = FatFs;
 
 
+    //´íÎó´¦Àí
 	if (!fs) return FR_NOT_ENABLED;
 	if ((disk_status() & STA_NOINIT) || !fs->fs_type) return FR_NOT_READY;
 	if (fp->flag & FA__ERROR) return FR_RW_ERROR;
+    
 #ifndef _FS_READONLY
+    //Èç¹ûbufferÖÐµÄÄÚÈÝ±»ÐÞ¸Ä¹ý£¬ÔòÐèÒªÏÈ½«bufferÖÐµÄÄÚÈÝ»ØÐ´µ½ÎïÀí´ÅÅÌÖÐ
 	if (fp->flag & FA__DIRTY) {			/* Write-back dirty buffer if needed */
 		if (disk_write(fp->buffer, fp->curr_sect, 1) != RES_OK) goto fk_error;
 		fp->flag &= ~FA__DIRTY;
 	}
 #endif
+
 	if (ofs > fp->fsize) ofs = fp->fsize;	/* Clip offset by file size */
 	if ((ofs & 511) && (fp->flag & FA_UNBUFFERED)) return FR_ALIGN_ERROR;
-	fp->fptr = ofs; fp->sect_clust = 1; 	/* Re-initialize file pointer */
+
+    //ÖØÐÂ³õÊ¼»¯ÎÄ¼þÖ¸Õë
+	fp->fptr = ofs;                         /* Re-initialize file pointer */
+    
+    fp->sect_clust = 1; 	
 
 	/* Seek file pinter if needed */
 	if (ofs) {
+
+        //¼ÆËãÆ«ÒÆÖ¸ÕëofsËùÔÚµÄ´ØºÅ
 		ofs = (ofs - 1) / 512;				/* Calcurate current sector */
 		sc = fs->sects_clust;				/* Number of sectors in a cluster */
 		fp->sect_clust = sc - (ofs % sc);	/* Calcurate sector counter */
@@ -871,7 +1161,11 @@ FRESULT f_lseek (
 			clust = get_cluster(clust);
 		if ((clust < 2) || (clust >= fs->max_clust)) goto fk_error;
 		fp->curr_clust = clust;
+        
+        //¼ÆËãÆ«ÒÆÖ¸ÕëofsËùÔÚµÄÉÈÇøºÅ
 		fp->curr_sect = clust2sect(clust) + sc - fp->sect_clust;	/* Current sector */
+
+        //Èç¹ûÆ«ÒÆÖ¸Õë²»ÔÚÉÈÇø±ß½ç£¬Ôò½«Ö¸ÕëËùÔÚµÄÉÈÇøÄÚÈÝ¶Áµ½bufferÖÐ£¬¹©ºóÐøf_read£¬f_write²Ù×÷
 		if (fp->fptr & 511) {										/* Load currnet sector if needed */
 			if (disk_read(fp->buffer, fp->curr_sect, 1) != RES_OK)
 				goto fk_error;
@@ -890,6 +1184,7 @@ fk_error:	/* Abort this file due to an unrecoverable error */
 /*-------------------------------------------------*/
 /* Synchronize between File and Disk without Close */
 
+//½«µ±Ç°²Ù×÷»º³åÇøµÄÊý¾ÝÐ´ÈëÎïÀí´ÅÅÌÖÐ
 #ifndef _FS_READONLY
 FRESULT f_sync (
 	FIL *fp		/* Pointer to the file object */
@@ -903,24 +1198,39 @@ FRESULT f_sync (
 	if ((disk_status() & STA_NOINIT) || !fs->fs_type)
 		return FR_INCORRECT_DISK_CHANGE;
 
+	//¼ì²éÎÄ¼þÊÇ·ñÔö¼ÓÁËÐÂµÄÄÚÈÝ£¬Èç¹ûÊÇÔòÐèÒªÐÞ¸ÄÄ¿Â¼Ïî
 	/* Has the file been written? */
 	if (fp->flag & FA__WRITTEN) {
+
+        //Èç¹ûbufferµÄÄÚÈÝ±»ÐÞ¸ÄÁË£¬ÔòÐèÒªÏÈ½«bufferµÄÄÚÈÝ»ØÐ´µ½ÎïÀí´ÅÅÌÖÐÈ¥
 		/* Write back data buffer if needed */
 		if (fp->flag & FA__DIRTY) {
 			if (disk_write(fp->buffer, fp->curr_sect, 1) != RES_OK) return FR_RW_ERROR;
 			fp->flag &= ~FA__DIRTY;
 		}
+
+	/*************ÓÉÓÚ¸ü¸ÄÁËÎÄ¼þ³¤¶È£¬ËùÒÔÐèÒªÐÞ¸ÄÎÄ¼þ¶ÔÓ¦µÄÄ¿Â¼Ïî************/
+
+		//Ê×ÏÈ¶ÁÈ¡ÎÄ¼þ¶ÔÓ¦µÄ¸ùÄ¿Â¼ÉÈÇøµ½win[]
 		/* Update the directory entry */
 		if (!move_window(fp->dir_sect)) return FR_RW_ERROR;
+
+		//È»ºóÐÞ¸Ä¸ùÄ¿Â¼Ïî
 		ptr = fp->dir_ptr;
 		*(ptr+11) |= AM_ARC;					/* Set archive bit */
 		ST_DWORD(ptr+28, fp->fsize);			/* Update file size */
 		ST_WORD(ptr+26, fp->org_clust);			/* Update start cluster */
 		ST_WORD(ptr+20, fp->org_clust >> 16);
 		ST_DWORD(ptr+22, get_fattime());		/* Updated time */
-		fs->winflag = 1;
+
+		//ÉèÖÃwin[]»ØÐ´±êÖ¾
+		fs->dirtyflag = 1;
+
+		//Çå³ýÎÄ¼þ´óÐ¡¸ü¸Ä±ê¼Ç
 		fp->flag &= ~FA__WRITTEN;
 	}
+
+	//½«win[]ÖÐµÄ¸ùÄ¿Â¼ÐÅÏ¢»ØÐ´µ½¶ÔÓ¦µÄÎïÀíÉÈÇø
 	if (!move_window(0)) return FR_RW_ERROR;
 
 	return FR_OK;
@@ -928,7 +1238,7 @@ FRESULT f_sync (
 #endif
 
 
-
+//¹Ø±ÕÎÄ¼þ£¬²¢½«×îºóÊ£ÓàµÄÉÈÇøÄÚÈÝË¢ÈëÎïÀí´ÅÅÌÖÐ¡
 /*------------*/
 /* Close File */
 
@@ -945,8 +1255,8 @@ FRESULT f_close (
 	res = FR_OK;
 #endif
 	if (res == FR_OK) {
-		fp->flag = 0;
-		FatFs->files--;
+		fp->flag = 0;		//ÎÄ¼þ×´Ì¬±ê¼ÇÇåÁã
+		FatFs->files--;		//ÎÄ¼þ´ò¿ª´ÎÊý¼õ1
 	}
 	return res;
 }
@@ -995,7 +1305,7 @@ FRESULT f_unlink (
 
 	if (!remove_chain(dclust)) return FR_RW_ERROR;	/* Remove the cluster chain */
 	if (!move_window(dsect)) return FR_RW_ERROR;	/* Mark the directory entry deleted */
-	*dir = 0xE5; fs->winflag = 1;
+	*dir = 0xE5; fs->dirtyflag = 1;
 	if (!move_window(0)) return FR_RW_ERROR;
 
 	return FR_OK;
@@ -1052,7 +1362,7 @@ FRESULT f_mkdir (
 	ST_WORD(w+20, dclust >> 16);
 	ST_WORD(w+32+26, dirscan.sclust);
 	ST_WORD(w+32+20, dirscan.sclust >> 16);
-	fs->winflag = 1;
+	fs->dirtyflag = 1;
 
 	if (!move_window(sect)) return FR_RW_ERROR;
 	memcpy(dir, fn, 8+3);			/* Initialize the new entry */
@@ -1062,7 +1372,7 @@ FRESULT f_mkdir (
 	ST_DWORD(dir+22, tim);			/* Crated time */
 	ST_WORD(dir+26, dclust);		/* Table start cluster */
 	ST_WORD(dir+20, dclust >> 16);
-	fs->winflag = 1;
+	fs->dirtyflag = 1;
 
 	if (!move_window(0)) return FR_RW_ERROR;
 
@@ -1191,7 +1501,7 @@ FRESULT f_chmod (
 		} else {
 			mask &= AM_RDO|AM_HID|AM_SYS|AM_ARC;	/* Valid attribute mask */
 			*(dir+11) = (value & mask) | (*(dir+11) & ~mask);	/* Apply attribute change */
-			fs->winflag = 1;
+			fs->dirtyflag = 1;
 			if(!move_window(0)) res = FR_RW_ERROR;
 		}
 	}

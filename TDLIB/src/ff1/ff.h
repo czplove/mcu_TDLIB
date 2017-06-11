@@ -37,7 +37,7 @@ typedef struct _FATFS {
 	BYTE	sects_clust;	// Sectors per cluster
 	BYTE	n_fats;			// Number of FAT copies
 	WORD	n_rootdir;		// Number of root directory entry
-	BYTE	winflag;		// win[] dirty flag (1:must be written back)
+	BYTE	dirtyflag;		// win[] dirty flag (1:must be written back)
 	BYTE	pad1;
 	DWORD	sects_fat;		// Sectors per fat
 	DWORD	max_clust;		// Maximum cluster# + 1
@@ -66,7 +66,11 @@ typedef struct _FIL {
 	DWORD	curr_clust;		// Current cluster
 	DWORD	curr_sect;		// Current sector
 #ifndef _FS_READONLY
+
+	//目录项所在的扇区号
 	DWORD	dir_sect;		// Sector containing the directory entry
+	
+	//目录项在扇区中的字节偏移量
 	BYTE*	dir_ptr;		// Ponter to the directory entry in the window
 #endif
 	BYTE*	buffer;			// Pointer to 512 byte file R/W buffer
@@ -139,13 +143,13 @@ DWORD get_fattime();	// 31-25: Year(0-127 +1980), 24-21: Month(1-12), 20-16: Day
 
 #define	FA_READ				0x01
 #define	FA_UNBUFFERED		0x04
-#define	FA_OPEN_EXISTING	0x00
+#define	FA_OPEN_EXISTING	0x00	//如果文件存在，则打开文件；如果文件不存在，则返回错误代码
 #ifndef _FS_READONLY
 #define	FA_WRITE			0x02
-#define	FA_CREATE_ALWAYS	0x08
-#define	FA_OPEN_ALWAYS		0x10
-#define FA__WRITTEN			0x20
-#define FA__DIRTY			0x40
+#define	FA_CREATE_ALWAYS	0x08	//强制新建文件，即使文件存在，也会被重写
+#define	FA_OPEN_ALWAYS		0x10	//如果文件存在，则打开文件；如果文件不存在，则新建文件
+#define FA__WRITTEN			0x20    //文件大小更改标记位
+#define FA__DIRTY			0x40    //buffer缓冲区回写标记位
 #endif
 #define FA__ERROR			0x80
 
@@ -168,6 +172,13 @@ DWORD get_fattime();	// 31-25: Year(0-127 +1980), 24-21: Month(1-12), 20-16: Day
 
 
 /* Multi-byte word access macros  */
+
+/*
+LD_WORD:	load word，读数据(16位数据宽度)
+LD_DWORD:	load double word，读数据(32位数据宽度)
+ST_WORD:	store word，写数据(16位数据宽度)
+ST_DWORD:	store double word，写数据(32位数据宽度)
+*/
 
 #ifdef _BYTE_ACC
 #define	LD_WORD(ptr)		(((WORD)*(BYTE*)(ptr+1)<<8)|*(ptr))
