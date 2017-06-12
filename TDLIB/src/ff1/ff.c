@@ -81,7 +81,7 @@ BOOL move_window (	//-所谓的窗口其实就是一个扇区大小的数据缓存,用于操作的
 
 //读取指定簇的内容，即获取下一条簇链的位置
 static
-DWORD get_cluster (
+DWORD get_cluster (	//-获取FAT表项值
 	DWORD clust			/* Cluster# to get the link information */
 )
 {
@@ -101,7 +101,7 @@ DWORD get_cluster (
 			
 		case FS_FAT32 :
 			/*读取FAT表，因为FAT32一个扇区包含128个簇，所以这里要除以128*/
-			if (!move_window(clust / 128 + fs->fatbase)) break;
+			if (!move_window(clust / 128 + fs->fatbase)) break;	//-先找到簇在FAT表中的扇区位置,然后取出该扇区内容
 			
 			/*读取指定簇号的内容，该内容即为下一个簇链的簇号；
 			由于FAT32中一个簇用4字节表示，所以这里乘以4；
@@ -158,7 +158,7 @@ BOOL put_cluster (
 //删除一条簇链
 #ifndef _FS_READONLY
 static
-BOOL remove_chain (
+BOOL remove_chain (	//-FAT表项内容为0说明他对应的簇没有被使用,那么这里清0就删除了内容
 	DWORD clust			/* Cluster# to remove chain from */
 )
 {
@@ -184,7 +184,7 @@ BOOL remove_chain (
 //若clust不是簇链中的最后一个，则直接返回下一个簇号
 #ifndef _FS_READONLY
 static
-DWORD create_chain (
+DWORD create_chain (	//-创建簇遵循查找第一个可用的
 	DWORD clust			 /* Cluster# to stretch, 0 means create new */
 )
 {
@@ -277,9 +277,9 @@ BYTE check_fs (	//-从这里可以猜测到一个存储介质使用的文件系统,是所有的东西都认可
 	FATFS *fs = FatFs;
 
 	//首先将FATFS对象的扇区缓冲区清零
-	memset(fs->win, 0, 512);
+	memset(fs->win, 0, 512);	//-这个缓冲区其实就是“内存”
 
-	//然后读取指定扇区内容到缓冲区中
+	//然后读取指定扇区内容到缓冲区中，数据的处理都是先调入内存的
 	if (disk_read(fs->win, sect, 1) == RES_OK) {	/* Load boot record */
 
 		//检查最后2字节是否为'0x55' '0xAA'
@@ -305,7 +305,7 @@ BYTE check_fs (	//-从这里可以猜测到一个存储介质使用的文件系统,是所有的东西都认可
 /* Move Directory Pointer to Next */
 
 static
-BOOL next_dir_entry (
+BOOL next_dir_entry (	//-就是换下一个目录项进行判断,看看目录是否需要更新
 	DIR *scan			/* Pointer to directory object */
 )
 {
@@ -474,17 +474,17 @@ FRESULT trace_path (
 	
 	/*首先初始化目录项的基本参数*/
 	/* Initialize directory object */
-	clust = fs->dirbase;	//-最初这个信息是从硬件中读取出来的
+	clust = fs->dirbase;	//-最初这个信息是从硬件中读取出来的,根目录所在第一个簇的簇号
 	if (fs->fs_type == FS_FAT32) {
         //对于FAT32来讲，dirbase为根目录起始簇号；
 		scan->clust = scan->sclust = clust;
-		scan->sect = clust2sect(clust);
+		scan->sect = clust2sect(clust);	//-由簇号得到当前扇区号
 	} else {
         //但对于FAT16来讲，dirbase为根目录起始扇区号*/
 		scan->clust = scan->sclust = 0;
 		scan->sect = clust;
 	}
-	scan->index = 0;
+	scan->index = 0;	//-在一个扇区内的当前偏移是0(32个字节一个偏移总共0到15)
 
 	//去掉开头的空格符和目录分隔符'/'
 	while ((*path == ' ') || (*path == '/')) path++;	/* Skip leading spaces */
@@ -528,7 +528,7 @@ FRESULT trace_path (
 
 #ifndef _FS_READONLY
 static
-BYTE* reserve_direntry (
+BYTE* reserve_direntry (	//-存储目录项
 	DIR *scan			/* Target directory to create new entry */
 )
 {
@@ -551,7 +551,7 @@ BYTE* reserve_direntry (
 		if (!move_window(scan->sect)) return NULL;
 		dptr = &(fs->win[(scan->index & 15) * 32]);		/* Pointer to the directory entry */
 		c = *dptr;
-		if ((c == 0) || (c == 0xE5)) return dptr;		/* Found an empty entry! */
+		if ((c == 0) || (c == 0xE5)) return dptr;		/* Found an empty entry! *///-文件名的第一个字节，为0xE5，表示该项已被删除。
 	} while (next_dir_entry(scan));						/* Next directory pointer */
 	/* Reached to end of the directory table */
 
@@ -628,7 +628,7 @@ FRESULT f_mountdrv ()	//-把磁盘参数从硬件上读取到内存结构体内
 	/* Initialize disk drive */
 	if (disk_initialize() & STA_NOINIT)	return FR_NOT_READY;	//-这里的函数需要外部实现
 
-	//接着收搜索DBR系统引导记录，先检查第0扇区是否就是DBR(无MBR的SD卡)，如果是则检查文件系统的类型；
+	//接着搜索DBR系统引导记录，先检查第0扇区是否就是DBR(无MBR的SD卡)，如果是则检查文件系统的类型；
 	//如果不是则说明第0扇区是MBR，则根据MBR中的信息定位到DBR所在扇区，并检查该文件系统的类型
 	/* Search FAT partition */
 	fat = check_fs(sect = 0);		/* Check sector 0 as an SFD format */

@@ -51,10 +51,10 @@ typedef struct _FATFS {
 
 /* Directory object structure */
 typedef struct _DIR {
-	DWORD	sclust;		// Start cluster
-	DWORD	clust;		// Current cluster
-	DWORD	sect;		// Current sector
-	WORD	index;		// Current index
+	DWORD	sclust;		// Start cluster,目录项所在的起始簇号sclust
+	DWORD	clust;		// Current cluster,目录项所在的当前簇号clust
+	DWORD	sect;		// Current sector,目录项所在的当前扇区号sect
+	WORD	index;		// Current index,目录项在当前扇区中的索引号index(0~15)
 } DIR;
 
 
