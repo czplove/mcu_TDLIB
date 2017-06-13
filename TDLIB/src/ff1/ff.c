@@ -280,7 +280,7 @@ BYTE check_fs (	//-从这里可以猜测到一个存储介质使用的文件系统,是所有的东西都认可
 	memset(fs->win, 0, 512);	//-这个缓冲区其实就是“内存”
 
 	//然后读取指定扇区内容到缓冲区中，数据的处理都是先调入内存的
-	if (disk_read(fs->win, sect, 1) == RES_OK) {	/* Load boot record */
+	if (disk_read(fs->win, sect, 1) == RES_OK) {	/* Load boot record */	//-获取一个扇区的内容
 
 		//检查最后2字节是否为'0x55' '0xAA'
 		if (LD_WORD(&(fs->win[510])) == 0xAA55) {		/* Is it valid? */
@@ -378,9 +378,9 @@ void get_fileinfo (
 
 /*-------------------------------------------------------------------*/
 /* Pick a Paragraph and Create the Name in Format of Directory Entry */
-
+//-返回1表示无效的名字
 static
-char make_dirfile (
+char make_dirfile (	//-获取最上层目录名,内部逻辑是独立的,特殊情况后期再考虑
 	const char **path,		/* Pointer to the file path pointer */
 	char *dirname			/* Pointer to directory name buffer {Name(8), Ext(3), NT flag(1)} */
 )
@@ -393,7 +393,7 @@ char make_dirfile (
 	n = 0; t = 8;
 	for (;;) {
 		c = *(*path)++;
-		if (c <= ' ') c = 0;
+		if (c <= ' ') c = 0;	//-小于就是非打印控制字符,是无效的
 		if ((c == 0) || (c == '/')) {			/* Reached to end of str or directory separator */
 			if (n == 0) break;
 			dirname[11] = a & b; return c;
@@ -417,7 +417,7 @@ char make_dirfile (
 #endif
 		if (c == '"') break;					/* Reject " */
 		if (c <= ')') goto md_l1;				/* Accept ! # $ % & ' ( ) */
-		if (c <= ',') break;					/* Reject * + , */
+		if (c <= ',') break;					/* Reject * + , */	//-抛弃不需要的字符
 		if (c <= '9') goto md_l1;				/* Accept - 0-9 */
 		if (c <= '?') break;					/* Reject : ; < = > ? */
 		if (!(a & 1)) {	/* These checks are not applied to S-JIS 2nd byte */
@@ -434,7 +434,7 @@ char make_dirfile (
 		a &= ~1;
 	md_l2:
 		if (n >= t) break;
-		dirname[n++] = c;
+		dirname[n++] = c;	//-把获取的有效字符存储起来
 	}
 	return 1;
 }
@@ -452,7 +452,7 @@ scan:用来返回找到的目录项结构体
 fn:用来返回标准的8.3格式文件名
 dir:用来返回目录项在当前WIN[]缓冲区中的字节偏移量*/
 static
-FRESULT trace_path (
+FRESULT trace_path (	//-检索所需要的内容
 	DIR *scan,			/* Pointer to directory object to return last directory */
 	char *fn,			/* Pointer to last segment name to return */
 	const char *path,	/* Full-path string to trace a file or directory */
@@ -477,14 +477,14 @@ FRESULT trace_path (
 	clust = fs->dirbase;	//-最初这个信息是从硬件中读取出来的,根目录所在第一个簇的簇号
 	if (fs->fs_type == FS_FAT32) {
         //对于FAT32来讲，dirbase为根目录起始簇号；
-		scan->clust = scan->sclust = clust;
+		scan->clust = scan->sclust = clust;	//-记录簇号,簇号是文件存储的单位
 		scan->sect = clust2sect(clust);	//-由簇号得到当前扇区号
 	} else {
         //但对于FAT16来讲，dirbase为根目录起始扇区号*/
 		scan->clust = scan->sclust = 0;
 		scan->sect = clust;
 	}
-	scan->index = 0;	//-在一个扇区内的当前偏移是0(32个字节一个偏移总共0到15)
+	scan->index = 0;	//-在一个扇区内的当前偏移是0(目录项是32个字节一个)
 
 	//去掉开头的空格符和目录分隔符'/'
 	while ((*path == ' ') || (*path == '/')) path++;	/* Skip leading spaces */
@@ -497,7 +497,7 @@ FRESULT trace_path (
 	//从根目录开始，逐层查找文件
 	for (;;) {
 		//每次从路径中截取最上层的目录名到fn中，并格式化成8.3格式
-		ds = make_dirfile(&path, fn);			/* Get a paragraph into fn[] */
+		ds = make_dirfile(&path, fn);			/* Get a paragraph into fn[] */	//-等于/就是路劲,否则是文件
 		if (ds == 1) return FR_INVALID_NAME;
 
 		//在扇区中，依次查找符合fn的目录项
@@ -738,7 +738,7 @@ FRESULT f_open (
 {
 	FRESULT res;
 	BYTE *dir;
-	DIR dirscan;
+	DIR dirscan;	//-记录目录项的内容,而根据目录项就可以确定对应的文件
 	char fn[8+3+1];			//8.3 DOS文件名
 	FATFS *fs = FatFs;		//-先用一个指针实现逻辑，实体应用时再赋值
 
@@ -1510,3 +1510,46 @@ FRESULT f_chmod (
 #endif
 
 
+#if 0
+void main(void)
+{
+    FATFS fs;            // FatFs work area
+    FIL fsrc, fdst;      // file structures
+    BYTE fbuff[512*2];   // file r/w buffers (not required for Tiny-FatFs)
+    BYTE buffer[4096];   // file copy buffer
+    FRESULT res;         // FatFs function common result code
+    WORD br, bw;         // File R/W count
+
+
+    // Activate FatFs module
+    memset(&fs, 0, sizeof(FATFS));
+    FatFs = &fs;
+
+    // Open source file
+    fsrc.buffer = fbuff+0;	// (not required for Tiny-FatFs)
+    res = f_open(&fsrc, "/srcfile.dat", FA_OPEN_EXISTING | FA_READ);
+    if (res) die(res);
+
+    // Create destination file
+    fdst.buffer = fbuff+512;	// (not required for Tiny-FatFs)
+    res = f_open(&fdst, "/dstfile.dat", FA_CREATE_ALWAYS | FA_WRITE);
+    if (res) die(res);
+
+    // Copy source to destination
+    for (;;) {
+        res = f_read(&fsrc, buffer, sizeof(buffer), &br);
+        if (res) die(res);
+        if (br == 0) break;
+        res = f_write(&fdst, buffer, br, &bw);
+        if (res) die(res);
+        if (bw < br) break;
+    }
+
+    // Close all files
+    f_close(&fsrc);
+    f_close(&fdst);
+
+    // Deactivate FatFs module
+    FatFs = NULL;
+}
+#endif
